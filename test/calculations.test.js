@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calculateLoan, validateSchedule, buildMissedWeeklyDueDates, buildMissedMonthlyDueDates } = require('../calculations');
+const { calculateLoan, validateSchedule, buildMissedWeeklyDueDates, buildMissedMonthlyDueDates, applyRecordedPayment, nextWeeklyDueDate, nextMonthlyDueDate } = require('../calculations');
 
 test('calculates the supplied changing-schedule example', () => {
   const result = calculateLoan({ total_due: 104, paid: 55, name: 'Loan A' }, [
@@ -35,4 +35,45 @@ test('builds missed weekly due dates from the last processed day through today',
 
 test('builds missed monthly due dates using the loan due date and local date boundaries', () => {
   assert.deepEqual(buildMissedMonthlyDueDates('2026-08-10', '2026-09-10', 10), ['2026-09-10']);
+});
+
+test('marks a loan as completed once all installments are paid', () => {
+  const active = calculateLoan({ total_due: 4, paid: 2, name: 'Loan B' }, [
+    { from: 1, to: 2, amount: 200 },
+    { from: 3, to: 4, amount: 150 }
+  ]);
+  const completed = calculateLoan({ total_due: 4, paid: 4, name: 'Loan C' }, [
+    { from: 1, to: 2, amount: 200 },
+    { from: 3, to: 4, amount: 150 }
+  ]);
+
+  assert.equal(active.status, 'Active');
+  assert.equal(completed.status, 'Completed');
+  assert.equal(completed.pending, 0);
+});
+
+test('only includes due dates that have actually arrived and not dates in the future', () => {
+  assert.deepEqual(buildMissedWeeklyDueDates('2026-09-21', '2026-09-24', 'Thursday'), ['2026-09-24']);
+  assert.deepEqual(buildMissedWeeklyDueDates('2026-09-21', '2026-09-24', 'Friday'), []);
+});
+
+test('manual payment advances the scheduled due exactly once', () => {
+  const loan = {
+    total_due: 5,
+    paid: 0,
+    due_day: 'Tuesday',
+    due_date: null,
+    last_processed_due_date: null,
+    last_processed_installment: 0,
+    type: 'weekly',
+    reduction_mode: 'manual',
+    created_at: '2026-09-15 00:00:00'
+  };
+
+  const updated = applyRecordedPayment(loan, '2026-09-22', 1);
+  assert.equal(updated.paid, 1);
+  assert.equal(updated.last_processed_due_date, '2026-09-22');
+  assert.equal(updated.last_processed_installment, 1);
+  assert.equal(nextWeeklyDueDate(updated.last_processed_due_date, updated.due_day, loan.created_at.slice(0, 10), '2026-09-22'), '2026-09-29');
+  assert.equal(nextMonthlyDueDate('2026-09-22', 22, '2026-09-15', '2026-09-22'), '2026-10-22');
 });

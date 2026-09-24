@@ -110,9 +110,57 @@ function calculateLoan(loan, schedule) {
   const nextInstallment = pending > 0 ? paid + 1 : null;
   let remainingTotal = 0;
   for (let installment = nextInstallment; installment && installment <= totalDue; installment += 1) remainingTotal += scheduleAmount(schedule, installment);
-  return { ...loan, total_due: totalDue, paid, pending, next_installment: nextInstallment, current_due_amount: nextInstallment ? scheduleAmount(schedule, nextInstallment) : 0, remaining_total: remainingTotal };
+  return {
+    ...loan,
+    total_due: totalDue,
+    paid,
+    pending,
+    next_installment: nextInstallment,
+    current_due_amount: nextInstallment ? scheduleAmount(schedule, nextInstallment) : 0,
+    remaining_total: remainingTotal,
+    status: paid >= totalDue ? 'Completed' : 'Active'
+  };
+}
+
+function resolveScheduledDueDate(loan, referenceISO = formatLocalDate(new Date())) {
+  if (!loan || Number(loan.paid) >= Number(loan.total_due)) return null;
+  const start = loan.created_at ? String(loan.created_at).slice(0, 10) : null;
+  if (loan.type === 'weekly') {
+    return nextWeeklyDueDate(loan.last_processed_due_date, loan.due_day, start, referenceISO);
+  }
+  return nextMonthlyDueDate(loan.last_processed_due_date, Number(loan.due_date), start, referenceISO);
+}
+
+function applyRecordedPayment(loan, paymentDateISO = formatLocalDate(new Date())) {
+  if (!loan) return loan;
+  const totalDue = Number(loan.total_due || 0);
+  const paid = Number(loan.paid || 0);
+  if (!totalDue || paid >= totalDue) return { ...loan, paid, last_processed_due_date: loan.last_processed_due_date || null, last_processed_installment: Number(loan.last_processed_installment || 0) };
+
+  const currentDueDate = loan.next_due || resolveScheduledDueDate(loan, paymentDateISO);
+  const installment = Number(loan.next_installment || paid + 1);
+  return {
+    ...loan,
+    paid: paid + 1,
+    last_processed_due_date: currentDueDate || loan.last_processed_due_date || null,
+    last_processed_installment: Number.isInteger(installment) && installment > 0 ? installment : Number(loan.last_processed_installment || 0)
+  };
 }
 
 function sumBy(items, key) { return items.reduce((total, item) => total + Number(item[key] || 0), 0); }
 
-module.exports = { validateSchedule, scheduleAmount, calculateLoan, sumBy, buildMissedWeeklyDueDates, buildMissedMonthlyDueDates, nextWeeklyDueDate, nextMonthlyDueDate, formatLocalDate, parseLocalDate, addDays };
+module.exports = {
+  validateSchedule,
+  scheduleAmount,
+  calculateLoan,
+  sumBy,
+  buildMissedWeeklyDueDates,
+  buildMissedMonthlyDueDates,
+  nextWeeklyDueDate,
+  nextMonthlyDueDate,
+  resolveScheduledDueDate,
+  applyRecordedPayment,
+  formatLocalDate,
+  parseLocalDate,
+  addDays
+};
