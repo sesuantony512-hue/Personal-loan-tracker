@@ -23,6 +23,22 @@ Object.assign(T.en, {
 Object.assign(T.ta, {
   on: 'ஆன்', off: 'ஆஃப்'
 });
+Object.assign(T.en, {
+  transactionType: 'Transaction type',
+  borrowType: 'Borrow',
+  lentType: 'Lent',
+  borrowedDate: 'Borrowed date',
+  lentDate: 'Lent date',
+  transactionDate: 'Date'
+});
+Object.assign(T.ta, {
+  transactionType: 'பரிவர்த்தனை வகை',
+  borrowType: 'பெற்ற கடன்',
+  lentType: 'கொடுத்த கடன்',
+  borrowedDate: 'கடன் பெற்ற தேதி',
+  lentDate: 'கடன் கொடுத்த தேதி',
+  transactionDate: 'தேதி'
+});
 
 const t = (key) => T[state.lang]?.[key] || key;
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -101,13 +117,22 @@ function heading(eyebrow, title, desc, action = '') {
   return `<div class="page-heading"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p>${desc}</p></div>${action}</div>`;
 }
 
+function typeTotal(items, type, key = 'amount') {
+  return items.reduce((total, item) => total + ((item.transaction_type || 'borrow') === type ? Number(item[key] || 0) : 0), 0);
+}
+
+function typeBadge(item) {
+  const type = item.transaction_type === 'lent' ? 'lent' : 'borrow';
+  return `<span class="type-badge type-${type}">${t(type === 'lent' ? 'lentType' : 'borrowType')}</span>`;
+}
+
 function home() {
   const remaining = state.loans.reduce((n, l) => n + l.remaining_total, 0);
   return heading(t('welcome'), t('overview'), 'A quiet view of what is moving through your life.') + `
     <div class="metrics">
       <a class="metric-link metric" href="#loans"><div class="metric-label">${t('loan')}</div><div class="metric-value">${state.loans.length}</div><div class="muted">${t('loanCount')} · ${money(remaining)} ${t('remaining')}</div></a>
-      <a class="metric-link metric" href="#interest"><div class="metric-label">${t('interestCard')}</div><div class="metric-value">${money(state.interest.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${money(state.interest.reduce((n, x) => n + Number(x.due_amount), 0))} ${t('totalDue')}</div></a>
-      <a class="metric-link metric" href="#borrow"><div class="metric-label">${t('borrowCard')}</div><div class="metric-value">${money(state.borrows.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${t('borrowed')}</div></a>
+      <a class="metric-link metric" href="#interest"><div class="metric-label">${t('interestCard')}</div><div class="metric-value">${money(state.interest.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${money(state.interest.reduce((n, x) => n + Number(x.due_amount), 0))} ${t('totalDue')}</div><div class="muted">${t('borrowType')}: ${money(typeTotal(state.interest, 'borrow'))} · ${t('lentType')}: ${money(typeTotal(state.interest, 'lent'))}</div><div class="muted">${t('borrowType')} ${t('totalDue')}: ${money(typeTotal(state.interest, 'borrow', 'due_amount'))} · ${t('lentType')} ${t('totalDue')}: ${money(typeTotal(state.interest, 'lent', 'due_amount'))}</div></a>
+      <a class="metric-link metric" href="#borrow"><div class="metric-label">${t('borrowCard')}</div><div class="metric-value">${money(state.borrows.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${t('borrowType')}: ${money(typeTotal(state.borrows, 'borrow'))} · ${t('lentType')}: ${money(typeTotal(state.borrows, 'lent'))}</div></a>
     </div>
     <h2 class="section-title">${t('loans')}</h2>
     <div class="panel">${state.loans.length ? `<div class="table-wrap"><table class="data-table"><tbody>${state.loans.slice(0, 4).map(loanRow).join('')}</tbody></table></div>` : `<div class="empty"><strong>${t('emptyLoans')}</strong>${t('addFirst')}</div>`}</div>
@@ -134,9 +159,28 @@ function loans() {
 function collection(kind, items) {
   const isInterest = kind === 'interest';
   const title = isInterest ? t('interest') : t('borrow');
+  const recordsTotal = typeTotal(items, 'borrow') + typeTotal(items, 'lent');
+  const borrowSummary = `<div class="subtle-total"><span>${t('borrowType')}</span><span>${money(typeTotal(items, 'borrow'))}${isInterest ? ` · ${t('dueAmount')}: ${money(typeTotal(items, 'borrow', 'due_amount'))}` : ''}</span></div>`;
+  const lentSummary = `<div class="subtle-total"><span>${t('lentType')}</span><span>${money(typeTotal(items, 'lent'))}${isInterest ? ` · ${t('dueAmount')}: ${money(typeTotal(items, 'lent', 'due_amount'))}` : ''}</span></div>`;
   return heading(title, title, 'Keep the details separate, simple, and useful.', `<button class="primary" data-action="add-${kind}">${isInterest ? t('addInterest') : t('addBorrow')}</button>`) + `
-    <div class="panel">${items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>${t('name')}</th>${isInterest ? `<th>${t('amount')}</th><th>${t('dueDate')}</th><th>${t('dueAmount')}</th>` : `<th>${t('borrowedDate')}</th><th>${t('dueDate')}</th><th>${t('amount')}</th>`}<th></th></tr></thead><tbody>${items.map((x) => `<tr><td><strong>${esc(x.name)}</strong></td>${isInterest ? `<td class="money">${money(x.amount)}</td><td>${date(x.due_date)}</td><td class="money">${money(x.due_amount)}</td>` : `<td>${date(x.borrowed_date)}</td><td>${date(x.due_date)}</td><td class="money">${money(x.amount)}</td>`}<td class="actions"><button class="more" data-menu="${kind}-${x.id}">⋮</button>${menu(kind, x.id)}</td></tr>`).join('')}</tbody></table></div><div class="subtle-total"><span>${isInterest ? t('totalAmount') : t('total')}</span><span>${money(items.reduce((n, x) => n + Number(x.amount), 0))}</span></div>${isInterest ? `<div class="subtle-total"><span>${t('totalDue')}</span><span>${money(items.reduce((n, x) => n + Number(x.due_amount), 0))}</span></div>` : ''}` : `<div class="empty"><strong>${isInterest ? t('emptyInterest') : t('emptyBorrow')}</strong>${t('addFirst')}</div>`}</div>
+    <div class="panel">${items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>${t('transactionType')}</th><th>${t('name')}</th>${isInterest ? `<th>${t('amount')}</th><th>${t('dueDate')}</th><th>${t('dueAmount')}</th>` : `<th>${t('transactionDate')}</th><th>${t('dueDate')}</th><th>${t('amount')}</th>`}<th></th></tr></thead><tbody>${items.map((x) => `<tr><td>${typeBadge(x)}</td><td><strong>${esc(x.name)}</strong></td>${isInterest ? `<td class="money">${money(x.amount)}</td><td>${date(x.due_date)}</td><td class="money">${money(x.due_amount)}</td>` : `<td>${date(x.borrowed_date)}</td><td>${date(x.due_date)}</td><td class="money">${money(x.amount)}</td>`}<td class="actions"><button class="more" data-menu="${kind}-${x.id}">⋮</button>${menu(kind, x.id)}</td></tr>`).join('')}</tbody></table></div><div class="subtle-total"><span>${isInterest ? t('totalAmount') : t('total')}</span><span>${money(recordsTotal)}</span></div>${isInterest ? `<div class="subtle-total"><span>${t('totalDue')}</span><span>${money(items.reduce((n, x) => n + Number(x.due_amount), 0))}</span></div>` : ''}${borrowSummary}${lentSummary}` : `<div class="empty"><strong>${isInterest ? t('emptyInterest') : t('emptyBorrow')}</strong>${t('addFirst')}</div>`}</div>
   `;
+}
+
+function collectionDetailModal(kind, id) {
+  const isInterest = kind === 'interest';
+  const item = (isInterest ? state.interest : state.borrows).find((record) => record.id == id);
+  if (!item) return;
+
+  const type = item.transaction_type === 'lent' ? 'lent' : 'borrow';
+  const details = [
+    [t('transactionType'), t(type === 'lent' ? 'lentType' : 'borrowType')],
+    [t('name'), item.name],
+    ...(isInterest
+      ? [[t('amount'), money(item.amount)], [t('dueDate'), date(item.due_date)], [t('dueAmount'), money(item.due_amount)]]
+      : [[t(type === 'lent' ? 'lentDate' : 'borrowedDate'), date(item.borrowed_date)], [t('dueDate'), date(item.due_date)], [t('amount'), money(item.amount)]])
+  ];
+  openModal(t('view'), `<div class="detail-grid">${details.map(([label, value]) => `<div class="detail"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div>`);
 }
 
 function esc(value) {
@@ -172,7 +216,7 @@ function action(kind, id, collectionKind) {
   if (kind === 'add-loan') return loanModal();
   if (kind === 'add-interest') return simpleModal('interest');
   if (kind === 'add-borrow') return simpleModal('borrow');
-  if (kind === 'view') return detailModal(id);
+  if (kind === 'view') return collectionKind === 'loan' ? detailModal(id) : collectionDetailModal(collectionKind, id);
   if (kind === 'edit') {
     if (collectionKind === 'loan') {
       return requireLoanPasswordVerification('edit', id, () => loanModal(id));
@@ -343,11 +387,18 @@ function scheduleRow(row) {
 function simpleModal(kind, id) {
   const item = id ? (kind === 'interest' ? state.interest : state.borrows).find((x) => x.id == id) : {};
   const isInterest = kind === 'interest';
+  const transactionType = item.transaction_type || 'borrow';
 
-  openModal(id ? t('edit') : isInterest ? t('addInterest') : t('addBorrow'), `<form id="simple-form"><div class="form-grid"><div class="field"><label>${t('name')}</label><input name="name" required value="${esc(item.name || '')}"></div>${isInterest ? `<div class="field"><label>${t('amount')}</label><input name="amount" type="number" min="0.01" step="0.01" required value="${item.amount || ''}"></div><div class="field"><label>${t('dueDate')}</label><input name="due_date" type="date" required value="${item.due_date || ''}"></div><div class="field"><label>${t('dueAmount')}</label><input name="due_amount" type="number" min="0.01" step="0.01" required value="${item.due_amount || ''}"></div>` : `<div class="field"><label>${t('borrowedDate')}</label><input name="borrowed_date" type="date" required value="${item.borrowed_date || ''}"></div><div class="field"><label>${t('dueDate')}</label><input name="due_date" type="date" required value="${item.due_date || ''}"></div><div class="field"><label>${t('amount')}</label><input name="amount" type="number" min="0.01" step="0.01" required value="${item.amount || ''}"></div>`}</div><div id="form-error" class="error"></div><div class="form-actions"><button type="button" class="ghost" data-close>${t('cancel')}</button><button class="primary">${t('save')}</button></div></form>`);
+  openModal(id ? t('edit') : isInterest ? t('addInterest') : t('addBorrow'), `<form id="simple-form"><div class="form-grid"><div class="field"><label>${t('transactionType')}</label><select name="transaction_type"><option value="borrow" ${transactionType === 'borrow' ? 'selected' : ''}>${t('borrowType')}</option><option value="lent" ${transactionType === 'lent' ? 'selected' : ''}>${t('lentType')}</option></select></div><div class="field"><label>${t('name')}</label><input name="name" required value="${esc(item.name || '')}"></div>${isInterest ? `<div class="field"><label>${t('amount')}</label><input name="amount" type="number" min="0.01" step="0.01" required value="${item.amount || ''}"></div><div class="field"><label>${t('dueDate')}</label><input name="due_date" type="date" required value="${item.due_date || ''}"></div><div class="field"><label>${t('dueAmount')}</label><input name="due_amount" type="number" min="0.01" step="0.01" required value="${item.due_amount || ''}"></div>` : `<div class="field"><label id="transaction-date-label">${t(transactionType === 'lent' ? 'lentDate' : 'borrowedDate')}</label><input name="borrowed_date" type="date" required value="${item.borrowed_date || ''}"></div><div class="field"><label>${t('dueDate')}</label><input name="due_date" type="date" required value="${item.due_date || ''}"></div><div class="field"><label>${t('amount')}</label><input name="amount" type="number" min="0.01" step="0.01" required value="${item.amount || ''}"></div>`}</div><div id="form-error" class="error"></div><div class="form-actions"><button type="button" class="ghost" data-close>${t('cancel')}</button><button class="primary">${t('save')}</button></div></form>`);
 
   document.querySelectorAll('[data-close]').forEach((button) => { button.onclick = closeModal; });
-  document.querySelector('#simple-form').onsubmit = async (event) => {
+  const form = document.querySelector('#simple-form');
+  if (!isInterest) {
+    form.querySelector('[name="transaction_type"]').onchange = (event) => {
+      document.querySelector('#transaction-date-label').textContent = t(event.target.value === 'lent' ? 'lentDate' : 'borrowedDate');
+    };
+  }
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.target));
     ['amount', 'due_amount'].forEach((key) => {

@@ -116,6 +116,7 @@ async function ensureSchema() {
   await query(`CREATE TABLE IF NOT EXISTS interest (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NULL,
+    transaction_type ENUM('borrow','lent') NOT NULL DEFAULT 'borrow',
     name VARCHAR(255) NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     due_date DATE NOT NULL,
@@ -129,6 +130,7 @@ async function ensureSchema() {
   await query(`CREATE TABLE IF NOT EXISTS hand_borrow (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NULL,
+    transaction_type ENUM('borrow','lent') NOT NULL DEFAULT 'borrow',
     name VARCHAR(255) NOT NULL,
     borrowed_date DATE NOT NULL,
     due_date DATE NOT NULL,
@@ -163,11 +165,17 @@ async function ensureSchema() {
   if (!interestColumnNames.has('user_id')) {
     await query('ALTER TABLE interest ADD COLUMN user_id BIGINT UNSIGNED NULL AFTER id');
   }
+  if (!interestColumnNames.has('transaction_type')) {
+    await query("ALTER TABLE interest ADD COLUMN transaction_type ENUM('borrow','lent') NOT NULL DEFAULT 'borrow' AFTER user_id");
+  }
 
   const borrowColumns = await query('SHOW COLUMNS FROM hand_borrow');
   const borrowColumnNames = new Set(borrowColumns.map((column) => column.Field));
   if (!borrowColumnNames.has('user_id')) {
     await query('ALTER TABLE hand_borrow ADD COLUMN user_id BIGINT UNSIGNED NULL AFTER id');
+  }
+  if (!borrowColumnNames.has('transaction_type')) {
+    await query("ALTER TABLE hand_borrow ADD COLUMN transaction_type ENUM('borrow','lent') NOT NULL DEFAULT 'borrow' AFTER user_id");
   }
 
   const indexCheck = await one(
@@ -562,7 +570,10 @@ function crudCollection(route, table, fields, required) {
 
   app.post(`/api/${route}`, async (req, res, next) => {
     try {
-      const values = fields.map((field) => req.body[field]);
+      const values = fields.map((field) => field === 'transaction_type' && req.body[field] === undefined ? 'borrow' : req.body[field]);
+      if (fields.includes('transaction_type') && !['borrow', 'lent'].includes(values[fields.indexOf('transaction_type')])) {
+        return res.status(400).json({ error: 'Transaction type must be borrow or lent.' });
+      }
       if (required.some((field) => !String(req.body[field] ?? '').trim())) return res.status(400).json({ error: 'Please provide valid values.' });
       const placeholders = Array.from({ length: fields.length + 3 }, () => '?').join(',');
       const result = await query(`INSERT INTO ${table} (user_id,${fields.join(',')},created_at,updated_at) VALUES (${placeholders})`, [req.session.userId, ...values, now(), now()]);
@@ -574,7 +585,10 @@ function crudCollection(route, table, fields, required) {
 
   app.put(`/api/${route}/:id`, async (req, res, next) => {
     try {
-      const values = fields.map((field) => req.body[field]);
+      const values = fields.map((field) => field === 'transaction_type' && req.body[field] === undefined ? 'borrow' : req.body[field]);
+      if (fields.includes('transaction_type') && !['borrow', 'lent'].includes(values[fields.indexOf('transaction_type')])) {
+        return res.status(400).json({ error: 'Transaction type must be borrow or lent.' });
+      }
       if (required.some((field) => !String(req.body[field] ?? '').trim())) return res.status(400).json({ error: 'Please provide valid values.' });
       const result = await query(`UPDATE ${table} SET ${fields.map((field) => `${field}=?`).join(',')},updated_at=? WHERE id=? AND user_id=?`, [...values, now(), req.params.id, req.session.userId]);
       result.affectedRows ? res.json(await one(`SELECT * FROM ${table} WHERE id=?`, [req.params.id])) : res.status(404).json({ error: 'Record not found.' });
@@ -593,18 +607,27 @@ function crudCollection(route, table, fields, required) {
   });
 }
 
-crudCollection('interest', 'interest', ['name', 'amount', 'due_date', 'due_amount'], ['name', 'amount', 'due_date', 'due_amount']);
-crudCollection('hand-borrow', 'hand_borrow', ['name', 'borrowed_date', 'due_date', 'amount'], ['name', 'borrowed_date', 'due_date', 'amount']);
+crudCollection('interest', 'interest', ['transaction_type', 'name', 'amount', 'due_date', 'due_amount'], ['name', 'amount', 'due_date', 'due_amount']);
+crudCollection('hand-borrow', 'hand_borrow', ['transaction_type', 'name', 'borrowed_date', 'due_date', 'amount'], ['name', 'borrowed_date', 'due_date', 'amount']);
 
 app.get('/api/dashboard', async (req, res, next) => {
   try {
     const loans = await query('SELECT * FROM loans WHERE user_id=?', [req.session.userId]);
-    const interests = await query('SELECT amount,due_amount FROM interest WHERE user_id=?', [req.session.userId]);
-    const borrows = await query('SELECT amount FROM hand_borrow WHERE user_id=?', [req.session.userId]);
+    const interests = await query('SELECT transaction_type,amount,due_amount FROM interest WHERE user_id=?', [req.session.userId]);
+    const borrows = await query('SELECT transaction_type,amount FROM hand_borrow WHERE user_id=?', [req.session.userId]);
+    const interestByType = Object.fromEntries(['borrow', 'lent'].map((type) => {
+      const records = interests.filter((item) => (item.transaction_type || 'borrow') === type);
+      return [type, { amount: sumBy(records, 'amount'), dueAmount: sumBy(records, 'due_amount') }];
+    }));
+    const handBorrowByType = Object.fromEntries(['borrow', 'lent'].map((type) => [
+      type,
+      sumBy(borrows.filter((item) => (item.transaction_type || 'borrow') === type), 'amount')
+    ]));
     res.json({
       loans: await Promise.all(loans.map(async (loan) => calculateLoan(loan, await getSchedules(loan.id)))),
-      interest: { amount: sumBy(interests, 'amount'), dueAmount: sumBy(interests, 'due_amount') },
-      handBorrow: sumBy(borrows, 'amount')
+      interest: { amount: sumBy(interests, 'amount'), dueAmount: sumBy(interests, 'due_amount'), byType: interestByType },
+      handBorrow: sumBy(borrows, 'amount'),
+      handBorrowByType
     });
   } catch (error) {
     next(error);
