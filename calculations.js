@@ -8,6 +8,27 @@ function formatLocalDate(date) {
   return `${y}-${m}-${d}`;
 }
 
+function calendarDateKey(dateString) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || ''));
+  if (!match) return null;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return null;
+  return year * 10000 + month * 100 + day;
+}
+
+function sortByCalendarDateDescending(items, field) {
+  return [...items].sort((left, right) => {
+    const leftDate = calendarDateKey(left[field]);
+    const rightDate = calendarDateKey(right[field]);
+    if (leftDate === null) return rightDate === null ? 0 : 1;
+    if (rightDate === null) return -1;
+    return rightDate - leftDate;
+  });
+}
+
 function parseLocalDate(dateString) {
   if (!dateString) return null;
   const [year, month, day] = String(dateString).split('-').map(Number);
@@ -161,6 +182,7 @@ module.exports = {
   resolveScheduledDueDate,
   applyRecordedPayment,
   formatLocalDate,
+  sortByCalendarDateDescending,
   parseLocalDate,
   addDays
 };

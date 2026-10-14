@@ -17,7 +17,8 @@ const {
   nextWeeklyDueDate,
   nextMonthlyDueDate,
   applyRecordedPayment,
-  formatLocalDate
+  formatLocalDate,
+  sortByCalendarDateDescending
 } = require('./calculations');
 
 const app = express();
@@ -454,12 +455,12 @@ app.use('/api/dashboard', requireAuth);
 app.get('/api/loans', async (req, res, next) => {
   try {
     await processAutomaticDues(req.session.userId);
-    const loans = await query('SELECT * FROM loans WHERE user_id=? ORDER BY created_at DESC', [req.session.userId]);
+    const loans = await query('SELECT * FROM loans WHERE user_id=? ORDER BY created_at DESC, id DESC', [req.session.userId]);
     const rows = await Promise.all(loans.map(async (loan) => ({
       ...addNextDue(calculateLoan(loan, await getSchedules(loan.id))),
       schedule: await getSchedules(loan.id)
     })));
-    res.json(rows);
+    res.json(sortByCalendarDateDescending(rows, 'next_due'));
   } catch (error) {
     next(error);
   }
@@ -556,10 +557,10 @@ app.post('/api/loans/:id/payments', async (req, res, next) => {
   }
 });
 
-function crudCollection(route, table, fields, required) {
+function crudCollection(route, table, fields, required, dateField) {
   app.get(`/api/${route}`, async (req, res, next) => {
     try {
-      const rows = await query(`SELECT * FROM ${table} WHERE user_id=? ORDER BY created_at DESC`, [req.session.userId]);
+      const rows = await query(`SELECT * FROM ${table} WHERE user_id=? ORDER BY ${dateField} DESC, id DESC`, [req.session.userId]);
       res.json(rows);
     } catch (error) {
       next(error);
@@ -614,8 +615,8 @@ function crudCollection(route, table, fields, required) {
   });
 }
 
-crudCollection('interest', 'interest', ['transaction_type', 'name', 'amount', 'due_date', 'due_amount'], ['name', 'amount', 'due_date', 'due_amount']);
-crudCollection('hand-borrow', 'hand_borrow', ['transaction_type', 'name', 'borrowed_date', 'due_date', 'amount'], ['name', 'borrowed_date', 'due_date', 'amount']);
+crudCollection('interest', 'interest', ['transaction_type', 'name', 'amount', 'due_date', 'due_amount'], ['name', 'amount', 'due_date', 'due_amount'], 'due_date');
+crudCollection('hand-borrow', 'hand_borrow', ['transaction_type', 'name', 'borrowed_date', 'due_date', 'amount'], ['name', 'borrowed_date', 'due_date', 'amount'], 'borrowed_date');
 
 app.get('/api/dashboard', async (req, res, next) => {
   try {

@@ -39,6 +39,8 @@ Object.assign(T.ta, {
   lentDate: 'கடன் கொடுத்த தேதி',
   transactionDate: 'தேதி'
 });
+Object.assign(T.en, { activeLoan: 'active loan' });
+Object.assign(T.ta, { activeLoan: 'செயலில் உள்ள கடன்' });
 
 const t = (key) => T[state.lang]?.[key] || key;
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -127,12 +129,29 @@ function typeBadge(item) {
 }
 
 function home() {
-  const remaining = state.loans.reduce((n, l) => n + l.remaining_total, 0);
+  const totalLoanAmount = state.loans.reduce((total, loan) => total + Number(loan.total_due || 0), 0);
+  const activeLoanCount = state.loans.filter((loan) => Number(loan.pending) > 0).length;
   return heading(t('welcome'), t('overview'), 'A quiet view of what is moving through your life.') + `
-    <div class="metrics">
-      <a class="metric-link metric" href="#loans"><div class="metric-label">${t('loan')}</div><div class="metric-value">${state.loans.length}</div><div class="muted">${t('loanCount')} · ${money(remaining)} ${t('remaining')}</div></a>
-      <a class="metric-link metric" href="#interest"><div class="metric-label">${t('interestCard')}</div><div class="metric-value">${money(state.interest.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${money(state.interest.reduce((n, x) => n + Number(x.due_amount), 0))} ${t('totalDue')}</div><div class="muted">${t('borrowType')}: ${money(typeTotal(state.interest, 'borrow'))} · ${t('lentType')}: ${money(typeTotal(state.interest, 'lent'))}</div><div class="muted">${t('borrowType')} ${t('totalDue')}: ${money(typeTotal(state.interest, 'borrow', 'due_amount'))} · ${t('lentType')} ${t('totalDue')}: ${money(typeTotal(state.interest, 'lent', 'due_amount'))}</div></a>
-      <a class="metric-link metric" href="#borrow"><div class="metric-label">${t('borrowCard')}</div><div class="metric-value">${money(state.borrows.reduce((n, x) => n + Number(x.amount), 0))}</div><div class="muted">${t('borrowType')}: ${money(typeTotal(state.borrows, 'borrow'))} · ${t('lentType')}: ${money(typeTotal(state.borrows, 'lent'))}</div></a>
+    <div class="metrics overview-metrics">
+      <a class="metric-link metric overview-metric overview-loans" href="#loans">
+        <div class="overview-metric-label">${t('loans')}</div>
+        <div class="overview-metric-value">${money(totalLoanAmount)}</div>
+        <div class="overview-active-count">${activeLoanCount} ${t(activeLoanCount === 1 ? 'activeLoan' : 'loanCount')}</div>
+      </a>
+      <a class="metric-link metric overview-metric" href="#interest">
+        <div class="overview-metric-label">${t('interestCard')}</div>
+        <div class="overview-breakdown">
+          <div class="overview-amount"><span>${t('lentType')}</span><strong>${money(typeTotal(state.interest, 'lent'))}</strong></div>
+          <div class="overview-amount"><span>${t('borrowType')}</span><strong>${money(typeTotal(state.interest, 'borrow'))}</strong></div>
+        </div>
+      </a>
+      <a class="metric-link metric overview-metric" href="#borrow">
+        <div class="overview-metric-label">${t('borrowCard')}</div>
+        <div class="overview-breakdown">
+          <div class="overview-amount"><span>${t('lentType')}</span><strong>${money(typeTotal(state.borrows, 'lent'))}</strong></div>
+          <div class="overview-amount"><span>${t('borrowType')}</span><strong>${money(typeTotal(state.borrows, 'borrow'))}</strong></div>
+        </div>
+      </a>
     </div>
     <h2 class="section-title">${t('loans')}</h2>
     <div class="panel">${state.loans.length ? `<div class="table-wrap"><table class="data-table"><tbody>${state.loans.slice(0, 4).map(loanRow).join('')}</tbody></table></div>` : `<div class="empty"><strong>${t('emptyLoans')}</strong>${t('addFirst')}</div>`}</div>

@@ -16,6 +16,8 @@ The backend connects through `mysql2`. Create an empty MySQL database first, for
 
 The app now keeps its main loan dashboard behind a session-based login. New users can register with a normalized phone number and password, and existing users can sign in using the same phone number format.
 
+Loan lists are ordered newest scheduled due date first using each loan's calculated next due date. Interest lists use their existing `due_date`, and Hand Borrow lists use `borrowed_date` (also used for Lent records); these MySQL `DATE` fields are ordered newest first without adding date columns.
+
 ## Environment
 
 ```env
