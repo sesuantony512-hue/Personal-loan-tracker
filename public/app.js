@@ -116,7 +116,7 @@ function registerNavigation() {
 }
 
 function heading(eyebrow, title, desc, action = '') {
-  return `<div class="page-heading"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p>${desc}</p></div>${action}</div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ''}</div>${action}</div>`;
 }
 
 function typeTotal(items, type, key = 'amount') {
@@ -131,7 +131,7 @@ function typeBadge(item) {
 function home() {
   const totalLoanAmount = state.loans.reduce((total, loan) => total + Number(loan.total_due || 0), 0);
   const activeLoanCount = state.loans.filter((loan) => Number(loan.pending) > 0).length;
-  return heading(t('welcome'), t('overview'), 'A quiet view of what is moving through your life.') + `
+  return heading(t('welcome'), t('overview'), '') + `
     <div class="metrics overview-metrics">
       <a class="metric-link metric overview-metric overview-loans" href="#loans">
         <div class="overview-metric-label">${t('loans')}</div>
