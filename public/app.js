@@ -129,7 +129,7 @@ function typeBadge(item) {
 }
 
 function home() {
-  const totalLoanAmount = state.loans.reduce((total, loan) => total + Number(loan.total_due || 0), 0);
+  const totalLoanAmount = state.loans.reduce((total, loan) => total + Number(loan.remaining_total || 0), 0);
   const activeLoanCount = state.loans.filter((loan) => Number(loan.pending) > 0).length;
   return heading(t('welcome'), t('overview'), '') + `
     <div class="metrics overview-metrics">
